@@ -1,7 +1,8 @@
 {
   "name": "hevlayer",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "Typed TypeScript client for the hevlayer gateway",
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -16,13 +17,15 @@
   },
   "files": [
     "dist",
-    "src",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --outDir .tmp-test && node --test .tmp-test/test/client.test.js"
+    "test": "rm -rf .tmp-test && tsc -p tsconfig.test.json && node --test .tmp-test/test/client.test.js"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
 }

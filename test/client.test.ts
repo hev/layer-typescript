@@ -30,7 +30,7 @@ test("core operations use the generated surface", async () => {
       assertEqual(url.searchParams.get("limit"), "10");
       return jsonResponse({ entries: [{ timestamp: "2026-05-22T08:00:00.000Z", timestamp_nanos: 1747900800000000000, namespace: "ns", trace_id: "trace", raw_query: "boots", stable_as_of: 42, query: { top_k: 1 }, top_result_ids: ["doc-1"], tags: ["app:shop"] }], next_cursor: null });
     }
-    if (method === "POST" && url.pathname === "/v2/namespaces/ns" && url.searchParams.get("stainless_overload") === null) {
+    if (method === "POST" && url.pathname === "/v2/namespaces/ns" && url.search === "") {
       if (body.patch_columns) {
         seen.add("patchColumns");
         assertDeepEqual(body.patch_columns.id, ["doc-1", "doc-2"]);
@@ -83,8 +83,15 @@ test("core operations use the generated surface", async () => {
       return jsonResponse({ pipeline_id: "p1", stage: "indexed", updated: 2 });
     }
     if (method === "PUT" && url.pathname === "/v2/pipelines/p1/documents/doc-1/vectors") {
-      seen.add("writeSingleVector");
-      assertEqual(body.vectors[0].id, "doc-1:chunk-1");
+      if (body.vectors[0].id === "doc-1:chunk-1") {
+        seen.add("writeSingleVector");
+      } else if (body.vectors[0].id === "doc-1:multi-1") {
+        seen.add("writeSingleMultivector");
+        assertDeepEqual(body.vectors[0].vectors, [[0.1, 0.2], [0.3, 0.4]]);
+        assertEqual(body.vectors[0].attributes.kind, "late");
+      } else {
+        throw new Error("unexpected vector id: " + body.vectors[0].id);
+      }
       return jsonResponse({ status: "ok", message: "vector" });
     }
     if (method === "POST" && url.pathname === "/v2/namespaces/ns/warm") {
@@ -126,7 +133,7 @@ test("core operations use the generated surface", async () => {
     throw new Error("unexpected request: " + method + " " + url.toString());
   };
 
-  const client = new Hevlayer({ baseUrl: "https://unit.test", apiKey: "  test-token\n", fetch, fallbackToTurbopuffer: false });
+  const client = new Hevlayer({ baseUrl: "https://unit.test", apiKey: "  test-token\n", fetch });
   const fetched = await client.fetchDocument("ns", "doc-1", { includeAttributes: ["title", "price"], withPerf: true }) as LayerResponse<any>;
   assertEqual(fetched.perf.cacheStatus, "hit");
   assertEqual(fetched.data.id, "doc-1");
@@ -155,6 +162,7 @@ test("core operations use the generated surface", async () => {
   const completed = await client.completeDocuments("p1", ["doc-1", "doc-2"], { fromStage: "embedding", workerId: "w1" });
   assertEqual(completed.updated, 2);
   await client.writeSingleVector("p1", "doc-1", { id: "doc-1:chunk-1", vector: [0.3, 0.4], attributes: { kind: "review" } });
+  await client.writeSingleMultivector("p1", "doc-1", "doc-1:multi-1", [[0.1, 0.2], [0.3, 0.4]], { kind: "late" });
   await client.patchColumns("ns", ["doc-1", "doc-2"], { tags: [["durable"], ["soft"]], tags_v: ["v1", "v1"] });
   await assertRejects(() => client.patchColumns("ns", [""], { tags: ["bad"] }));
   await assertRejects(() => client.patchColumns("ns", ["doc-1"], { id: ["bad"] }));
@@ -167,104 +175,9 @@ test("core operations use the generated surface", async () => {
   await client.deletePipeline("p1");
   await client.deleteNamespace("old-products");
 
-  for (const key of ["fetchDocument", "queryNamespace", "listSearchHistory", "writeNamespace", "branchNamespace", "recall", "createSnapshot", "getSnapshotJob", "createPipelineConflict", "listPipelines", "releaseDocuments", "failDocuments", "completeDocuments", "writeSingleVector", "patchColumns", "warmNamespace", "createScan", "getScan", "queryMetrics", "queryMetricsRange", "deleteScan", "deletePipeline", "deleteNamespace"]) {
+  for (const key of ["fetchDocument", "queryNamespace", "listSearchHistory", "writeNamespace", "branchNamespace", "recall", "createSnapshot", "getSnapshotJob", "createPipelineConflict", "listPipelines", "releaseDocuments", "failDocuments", "completeDocuments", "writeSingleVector", "writeSingleMultivector", "patchColumns", "warmNamespace", "createScan", "getScan", "queryMetrics", "queryMetricsRange", "deleteScan", "deletePipeline", "deleteNamespace"]) {
     assertOk(seen.has(key), "operation was not exercised: " + key);
   }
-});
-
-test("direct Turbopuffer fallback is gated and transform-aware", async () => {
-  const gatewayDown = new TypeError("gateway down");
-  const directCalls = new Set<string>();
-  const fetch: FetchLike = async (input, init) => {
-    const url = new URL(String(input));
-    const method = init?.method ?? "GET";
-    if (url.origin === "https://gateway-down.test") {
-      throw gatewayDown;
-    }
-    const headers = new Headers(init?.headers);
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-    assertEqual(headers.get("authorization"), "Bearer tpuf-key");
-    if (method === "POST" && url.pathname === "/v2/namespaces/ns/query") {
-      directCalls.add("query");
-      assertDeepEqual(body, { rank_by: ["vector", "ANN", [0.1, 0.2]], top_k: 1, consistency: { level: "eventual" }, include_attributes: ["title"] });
-      return jsonResponse({ rows: [{ id: "doc-1", "$dist": 0.1, title: "Boot", vector: [9, 9] }] });
-    }
-    if (method === "POST" && url.pathname === "/v2/namespaces/ns") {
-      directCalls.add("write");
-      assertEqual(body.upsert_rows[0].id, "doc-1");
-      return jsonResponse({ status: "OK", message: "direct", rows_affected: 1, billing: {} });
-    }
-    throw new Error("unexpected direct request: " + method + " " + url.toString());
-  };
-
-  const client = new Hevlayer({
-    baseUrl: "https://gateway-down.test",
-    turbopufferBaseUrl: "https://tpuf.test",
-    turbopufferApiKey: "tpuf-key",
-    fetch,
-  });
-  const query = await client.queryNamespace("ns", { vector: [0.1, 0.2], top_k: 1, include_attributes: ["title"] }, { withPerf: true }) as LayerResponse<any>;
-  assertEqual(query.perf.fallback, "turbopuffer_direct");
-  assertEqual(query.data.rows[0].title, "Boot");
-  const write = await client.writeNamespace("ns", { upsert_rows: [{ id: "doc-1", vector: [0.1, 0.2] }] });
-  assertEqual(write.status, "OK");
-  await assertRejects(() => client.fetchDocument("ns", "doc-1"), (error) => error === gatewayDown);
-  await assertRejects(() => client.queryNamespace("ns", { nearest_to_id: ["doc-1"], top_k: 1 }), (error) => error === gatewayDown);
-  await assertRejects(() => client.queryNamespace("ns", { nearestToId: ["doc-1"], top_k: 1 }), (error) => error === gatewayDown);
-  assertOk(directCalls.has("query"));
-  assertOk(directCalls.has("write"));
-
-  const disabled = new Hevlayer({
-    baseUrl: "https://gateway-down.test",
-    turbopufferBaseUrl: "https://tpuf.test",
-    turbopufferApiKey: "tpuf-key",
-    fallbackToTurbopuffer: false,
-    fetch,
-  });
-  await assertRejects(() => disabled.writeNamespace("ns", { upsert_rows: [{ id: "doc-1" }] }), (error) => error === gatewayDown);
-});
-
-test("reachable gateway HTTP errors do not fall through", async () => {
-  let directCalled = false;
-  const fetch: FetchLike = async (input) => {
-    const url = new URL(String(input));
-    if (url.origin === "https://tpuf.test") {
-      directCalled = true;
-    }
-    return jsonResponse({ error: "unavailable", message: "gateway reachable but failing" }, { status: 503 });
-  };
-  const client = new Hevlayer({
-    baseUrl: "https://gateway.test",
-    turbopufferBaseUrl: "https://tpuf.test",
-    turbopufferApiKey: "tpuf-key",
-    fetch,
-  });
-  await assertRejects(
-    () => client.writeNamespace("ns", { upsert_rows: [{ id: "doc-1" }] }),
-    (error) => error instanceof HevlayerError && error.statusCode === 503,
-  );
-  assertEqual(directCalled, false);
-});
-
-test("request preparation errors do not fall through", async () => {
-  let fetchCalled = false;
-  const fetch: FetchLike = async () => {
-    fetchCalled = true;
-    return jsonResponse({ status: "OK" });
-  };
-  const client = new Hevlayer({
-    baseUrl: "https://gateway-down.test",
-    turbopufferBaseUrl: "https://tpuf.test",
-    turbopufferApiKey: "tpuf-key",
-    fetch,
-  });
-  const circular: Record<string, unknown> = { upsert_rows: [] };
-  circular.self = circular;
-  await assertRejects(
-    () => client.writeNamespace("ns", circular),
-    (error) => error instanceof TypeError,
-  );
-  assertEqual(fetchCalled, false);
 });
 
 function jsonResponse(body: unknown, options: { status?: number; headers?: Record<string, string> } = {}): Response {

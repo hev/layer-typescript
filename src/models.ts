@@ -12,6 +12,26 @@ export type TurbopufferRankBy =
   | JSONValue[]
   | Record<string, JSONValue>;
 
+export interface LicenseSurfaceState {
+  [key: string]: unknown;
+  state: "licensed" | "grace" | "floor";
+  seconds_to_deadline: number;
+  grace_seconds_remaining: number;
+}
+
+export interface LicenseState {
+  [key: string]: unknown;
+  valid: boolean;
+  state?: "floor";
+  reason?: string;
+  sub?: string;
+  tier?: string;
+  features?: string[];
+  limits?: Record<string, number>;
+  exp?: string;
+  gateway: LicenseSurfaceState;
+}
+
 export interface CreatePipelineRequest {
   [key: string]: unknown;
   id: string;
@@ -35,7 +55,9 @@ export interface PipelineList {
 export interface PipelineStatus {
   [key: string]: unknown;
   pipeline_id: string;
+  status: "idle" | "pending" | "waiting_on_upstream";
   counts: Record<string, number>;
+  failed_reasons: Record<string, number>;
   pending_count: number;
   processing_count: number;
   failed_count: number;
@@ -111,7 +133,8 @@ export type GetChunksResponse = Chunk[];
 export interface VectorEntry {
   [key: string]: unknown;
   id: string;
-  vector: number[];
+  vector?: number[];
+  vectors?: number[][];
   attributes?: Record<string, unknown>;
 }
 
@@ -123,6 +146,11 @@ export interface PutVectorsRequest {
 export interface CreateUdfRequest {
   [key: string]: unknown;
   id: string;
+  spec: UdfSpec;
+}
+
+export interface UpdateUdfRequest {
+  [key: string]: unknown;
   spec: UdfSpec;
 }
 
@@ -263,6 +291,8 @@ export interface UdfCompleteItem {
   [key: string]: unknown;
   "namespace": string;
   id: string;
+  vector?: number[];
+  vectors?: number[][];
   attributes?: Record<string, unknown>;
 }
 
@@ -286,6 +316,122 @@ export interface UdfItemsResponse {
   [key: string]: unknown;
   udf_id: string;
   updated: number;
+}
+
+export type CostWindow = "1h" | "6h" | "24h" | "7d" | "30d";
+
+export type CostStep = "5m" | "30m" | "1h" | "6h" | "1d";
+
+export type CostBasis = "metered" | "invoice" | "estimate";
+
+export interface CostTotals {
+  [key: string]: unknown;
+  total_usd: number;
+  aws_usd: number;
+  turbopuffer_usd: number;
+  cost_per_query_usd?: number;
+  cost_per_document_usd?: number;
+  cost_per_tib_indexed_usd?: number;
+}
+
+export interface CostLine {
+  [key: string]: unknown;
+  provider: "aws" | "turbopuffer";
+  service: string;
+  basis: CostBasis;
+  service_detail?: string;
+  region?: string;
+  site?: string;
+  rate_card_version?: string;
+  amount_usd: number;
+  qty?: number;
+  unit?: string;
+  qty_bytes?: number;
+  breakdown?: Record<string, unknown>[];
+}
+
+export interface CostRateCardStatus {
+  [key: string]: unknown;
+  turbopuffer_rate_card_version: string;
+  aws_cost_source: "cost_explorer";
+  aws_cost_refreshed_at_ms: number;
+  aws_cost_stale: boolean;
+  aws_pricing_stale: boolean;
+  aws_pricing_refreshed_at_ms: number;
+}
+
+export interface CostSnapshot {
+  [key: string]: unknown;
+  as_of_ms: number;
+  window_seconds: number;
+  totals: CostTotals;
+  lines: CostLine[];
+  rate_card_status: CostRateCardStatus;
+  caveats: string[];
+}
+
+export type CostSample = unknown[];
+
+export interface CostSeries {
+  [key: string]: unknown;
+  provider?: "aws" | "turbopuffer";
+  service?: string;
+  basis?: CostBasis;
+  service_detail?: string;
+  region?: string;
+  site?: string;
+  rate_card_version?: string;
+  label?: string;
+  samples: CostSample[];
+}
+
+export interface CostTimeseries {
+  [key: string]: unknown;
+  window_seconds: number;
+  step_seconds: number;
+  series: CostSeries[];
+}
+
+export interface AwsInstancePrice {
+  [key: string]: unknown;
+  instance_type: string;
+  family: string;
+  vcpu: number;
+  memory_gib: number;
+  nvme_gib: number;
+  hourly_usd: number;
+}
+
+export interface AwsRateCard {
+  [key: string]: unknown;
+  role: "estimator";
+  region: string;
+  refreshed_at_ms: number;
+  ttl_seconds: number;
+  stale: boolean;
+  items: AwsInstancePrice[];
+}
+
+export interface TurbopufferRateLine {
+  [key: string]: unknown;
+  service: string;
+  unit: string;
+  usd: number;
+}
+
+export interface TurbopufferRateCard {
+  [key: string]: unknown;
+  version: string;
+  verified_by: string;
+  verified_at: string;
+  source: "invoice";
+  lines: TurbopufferRateLine[];
+}
+
+export interface RateCard {
+  [key: string]: unknown;
+  aws: AwsRateCard;
+  turbopuffer: TurbopufferRateCard;
 }
 
 export interface Document {
@@ -317,6 +463,13 @@ export interface StatusResponse {
   billing?: Record<string, unknown>;
 }
 
+export interface BlobPutResponse {
+  [key: string]: unknown;
+  ref: string;
+  sha256: string;
+  size: number;
+}
+
 export interface TurbopufferNamespaceSummary {
   [key: string]: unknown;
   id: string;
@@ -339,7 +492,7 @@ export type TurbopufferWriteRequest = Record<string, unknown>;
 
 export interface TurbopufferBranchFromRequest {
   [key: string]: unknown;
-  branch_from_namespace: Record<string, unknown>;
+  branch_from_namespace: string | Record<string, unknown>;
 }
 
 export interface TurbopufferCopyFromRequest {
@@ -378,14 +531,14 @@ export interface TurbopufferQueryResponse {
   performance?: Record<string, unknown>;
 }
 
-export interface TurbopufferMultiQueryRequest {
+export interface BatchQueryRequest {
   [key: string]: unknown;
   queries: TurbopufferQueryRequest[];
   consistency?: Record<string, unknown>;
   vector_encoding?: string;
 }
 
-export interface TurbopufferMultiQueryResponse {
+export interface BatchQueryResponse {
   [key: string]: unknown;
   results: TurbopufferQueryResponse[];
   billing?: Record<string, unknown>;
@@ -417,19 +570,22 @@ export interface TurbopufferRecallResponse {
 
 export interface HintCacheWarmResponse {
   [key: string]: unknown;
-  status?: string;
-  message?: string;
+  "namespace"?: string;
+  turbopuffer?: WarmStepResponse;
+  documents?: WarmDocumentsResponse;
+  snapshots?: WarmSnapshotsResponse;
+  blobs?: WarmBlobsResponse;
 }
 
 export type JobStatus = "running" | "completed" | "failed";
 
 export type SnapshotSource = "auto" | "stored" | "cache" | "origin";
 
-export type ScanSource = "auto" | "cache" | "origin";
+export type ScanSource = "auto" | "cache" | "origin" | "snapshot";
 
 export type ScanCountSource = "auto" | "snapshot" | "cache" | "origin";
 
-export type ScanMode = "ids" | "count";
+export type ScanMode = "ids" | "count" | "values";
 
 export type ScanCountServedBy = "snapshot" | "cache" | "origin";
 
@@ -441,13 +597,44 @@ export interface CreateSnapshotRequest {
   page_size?: number;
 }
 
+export interface SnapshotPolicy {
+  [key: string]: unknown;
+  facetFields?: string[];
+  interval?: string;
+  retention?: string;
+}
+
+export interface CreateCheckpointRequest {
+  [key: string]: unknown;
+  label: string;
+}
+
+export interface Checkpoint {
+  [key: string]: unknown;
+  "namespace": string;
+  label: string;
+  watermark_ms: number;
+  sha: string;
+  row_count: number;
+}
+
+export interface CheckpointList {
+  [key: string]: unknown;
+  checkpoints: Checkpoint[];
+  next_cursor?: string | null;
+}
+
 export interface CreateScanRequest {
   [key: string]: unknown;
   source?: ScanCountSource;
   filters?: TurbopufferFilter;
+  as_of?: number;
+  between?: number[];
   fts?: FtsScan;
+  hybrid_text?: HybridTextScan;
   ann?: AnnScan;
   mode?: ScanMode;
+  field?: string;
   exhaustive?: boolean;
   threads?: number;
   page_size?: number;
@@ -458,6 +645,13 @@ export interface FtsScan {
   [key: string]: unknown;
   field: string;
   query: string;
+}
+
+export interface HybridTextScan {
+  [key: string]: unknown;
+  field: string;
+  query: string;
+  fuzziness?: "auto" | number;
 }
 
 export interface AnnScan {
@@ -491,12 +685,28 @@ export interface WarmSnapshotsResponse {
   sha?: string;
 }
 
+export interface WarmBlobsResponse {
+  [key: string]: unknown;
+  enabled: boolean;
+  status: WarmStepStatus;
+  attributes?: string[];
+  budget_bytes?: number;
+  documents_scanned: number;
+  refs_seen: number;
+  objects: number;
+  bytes: number;
+  missing: number;
+  invalid_refs: number;
+  budget_exhausted: boolean;
+}
+
 export interface WarmCacheResponse {
   [key: string]: unknown;
   "namespace": string;
   turbopuffer: WarmStepResponse;
   documents: WarmDocumentsResponse;
   snapshots: WarmSnapshotsResponse;
+  blobs: WarmBlobsResponse;
 }
 
 export interface JobBase {
@@ -563,8 +773,16 @@ export interface ScanJob {
   created_at: string;
   completed_at?: string | null;
   error?: string | null;
+  mode: ScanMode;
+  field?: string;
   source: ScanSource;
   effective_source?: ScanSource;
+  unique_values?: number;
+  truncated?: boolean;
+  bounded?: boolean;
+  approximate?: boolean;
+  snapshot_sha?: string;
+  watermark_ms?: number;
   threads?: number;
 }
 
@@ -573,10 +791,17 @@ export interface ScanJobList {
   scans: ScanJob[];
 }
 
-export interface FieldValueResult {
+export interface ScanValue {
   [key: string]: unknown;
-  value: string;
-  doc_count: number;
+  v: string;
+  n: number;
+}
+
+export interface ScanValuesResponse {
+  [key: string]: unknown;
+  values: ScanValue[];
+  total: number;
+  truncated: boolean;
 }
 
 export interface ScanIdsResponse {
@@ -651,6 +876,35 @@ export interface NamespaceMetadata {
   last_write_at?: string | null;
   updated_at: string;
   config?: Record<string, unknown>;
+  index?: IndexState;
+  layer?: NamespaceMetadataLayer;
+}
+
+export interface NamespaceMetadataLayer {
+  [key: string]: unknown;
+  stable_as_of?: number | null;
+  is_stable?: boolean;
+  indexed?: boolean | null;
+  index_lag_rows?: number | null;
+  schema_version?: number;
+  init_state?: "running" | "ready";
+  init_lag_rows?: number;
+  shard_count?: number | null;
+  shard_state?: "unsharded" | "backfilling" | "ready";
+  shard_lag_rows?: number;
+  scatter_gather_active?: boolean;
+}
+
+export interface InitNamespaceRequest {
+  [key: string]: unknown;
+  schema_version?: number;
+  shard_count?: number;
+}
+
+export interface InitNamespaceResponse {
+  [key: string]: unknown;
+  "namespace": string;
+  layer: NamespaceMetadataLayer;
 }
 
 export interface QueryRequest {
@@ -659,8 +913,106 @@ export interface QueryRequest {
   nearest_to_id?: string[];
   top_k?: number;
   filters?: TurbopufferFilter;
+  as_of?: number;
+  between?: number[];
   include_attributes?: boolean | string[];
+  include_leg_breakdown?: boolean;
   cursor?: string;
+  rank_by?: TurbopufferRankBy;
+}
+
+export interface FederatedQueryRequest {
+  [key: string]: unknown;
+  vector?: number[];
+  nearest_to_id?: string[];
+  top_k?: number;
+  filters?: TurbopufferFilter;
+  as_of?: number;
+  between?: number[];
+  include_attributes?: boolean | string[];
+  include_leg_breakdown?: boolean;
+  cursor?: string;
+  rank_by?: TurbopufferRankBy;
+  namespaces?: string[];
+  strict?: boolean;
+  fusion?: FederatedFusionOptions;
+}
+
+export interface FederatedFusionOptions {
+  [key: string]: unknown;
+  per_namespace_limit?: number;
+  rank_constant?: number;
+}
+
+export interface AgentQueryRequest {
+  [key: string]: unknown;
+  query: string;
+  vector?: number[];
+  top_k?: number;
+}
+
+export interface AgentQueryResponse {
+  [key: string]: unknown;
+  rows: Record<string, unknown>[];
+  merge: Record<string, unknown>;
+  routing?: RoutingEcho;
+  hybrid?: HybridEcho;
+  namespaces: FederatedNamespaceResult[];
+  errors?: FederatedNamespaceError[];
+  agent?: AgentEcho;
+}
+
+export interface AgentEcho {
+  [key: string]: unknown;
+  turns: 1 | 2;
+  deadlineHit: boolean;
+  recallDepth: number;
+  relevanceWeight: number;
+  queries: Record<string, unknown>[];
+  trace?: string;
+}
+
+export interface FederatedQueryResponse {
+  [key: string]: unknown;
+  rows: Record<string, unknown>[];
+  merge: Record<string, unknown>;
+  routing?: RoutingEcho;
+  hybrid?: HybridEcho;
+  namespaces: FederatedNamespaceResult[];
+  errors?: FederatedNamespaceError[];
+}
+
+export interface FederatedNamespaceResult {
+  [key: string]: unknown;
+  "namespace": string;
+  stable_as_of?: number | null;
+  matched: number;
+}
+
+export interface FederatedNamespaceError {
+  [key: string]: unknown;
+  "namespace": string;
+  error: string;
+}
+
+export interface HybridEcho {
+  [key: string]: unknown;
+  tokens: string[];
+  tokens_dropped: number;
+  fuzziness: "auto" | 0 | 1 | 2;
+  rank_constant: number;
+  legs: number;
+  per_leg_limit: number;
+  surfaced?: boolean;
+  threads?: number;
+}
+
+export interface RoutingEcho {
+  [key: string]: unknown;
+  route: "hybrid_text" | "semantic" | "fused";
+  policy: string;
+  tokens: number;
+  executed: boolean;
 }
 
 export interface QueryResponse {
@@ -671,19 +1023,23 @@ export interface QueryResponse {
   billing?: Record<string, unknown>;
   performance?: Record<string, unknown>;
   stable_as_of?: number | null;
-  next_cursor?: string;
+  next_cursor?: string | null;
+  hybrid?: HybridEcho;
+  routing?: RoutingEcho;
 }
 
 export interface Error {
   [key: string]: unknown;
   error: string;
   message: string;
+  feature?: string;
 }
 
 export interface SnapshotHistoryEntry {
   [key: string]: unknown;
   watermark_ms: number;
   sha: string;
+  tags?: string[];
 }
 
 export interface SnapshotBody {
@@ -691,6 +1047,7 @@ export interface SnapshotBody {
   "namespace": string;
   watermark_ms: number;
   sha: string;
+  row_count?: number;
   fields: SnapshotField[];
   fields_skipped: SnapshotFieldSkipped[];
 }
@@ -796,4 +1153,257 @@ export interface ClickstreamListResponse {
   [key: string]: unknown;
   events: ClickstreamEvent[];
   next_cursor?: string;
+}
+
+export type KubernetesCondition = Record<string, unknown>;
+
+export interface SecretKeyRef {
+  [key: string]: unknown;
+  name: string;
+  key: string;
+}
+
+export type CapabilitySupport = "supported" | "approximate" | "unsupported" | "undeclared";
+
+export interface CapabilityCoverage {
+  [key: string]: unknown;
+  support: CapabilitySupport;
+  note: string;
+}
+
+export interface CapabilitiesStore {
+  [key: string]: unknown;
+  name: string;
+  kind: string;
+}
+
+export interface CapabilityFeature {
+  [key: string]: unknown;
+  id: string;
+  label: string;
+  page: string;
+  support: CapabilitySupport;
+  note: string;
+}
+
+export interface CapabilityHybridRoute {
+  [key: string]: unknown;
+  route: string;
+  feature: string;
+  support: CapabilitySupport;
+  note: string;
+}
+
+export interface CapabilitySchemaLimits {
+  [key: string]: unknown;
+  embed: CapabilityCoverage;
+  max_gateway_embed_attributes: number | null;
+  max_full_text_search_fields: number | null;
+  max_vector_fields: number | null;
+}
+
+export interface CapabilitiesReport {
+  [key: string]: unknown;
+  store: CapabilitiesStore;
+  declared: boolean;
+  features: CapabilityFeature[];
+  hybrid_routes: CapabilityHybridRoute[];
+  schema_limits: CapabilitySchemaLimits;
+}
+
+export interface VectorStoreEndpoint {
+  [key: string]: unknown;
+  url: string;
+  region: string;
+}
+
+export interface VectorStoreTurbopuffer {
+  [key: string]: unknown;
+  orgId: string;
+}
+
+export interface VectorStoreCredential {
+  [key: string]: unknown;
+  secretRef: SecretKeyRef;
+}
+
+export interface VectorStoreInboundAuth {
+  [key: string]: unknown;
+  mode?: "deriveFromStore" | "keys" | "open";
+}
+
+export interface VectorStoreStatus {
+  [key: string]: unknown;
+  reachable?: boolean;
+  observedGeneration?: number;
+  conditions: KubernetesCondition[];
+}
+
+export interface VectorStore {
+  [key: string]: unknown;
+  name: string;
+  kind: "turbopuffer" | "search" | "search-embedded" | "pgvector";
+  "default": boolean;
+  endpoint: VectorStoreEndpoint;
+  turbopuffer?: VectorStoreTurbopuffer;
+  credential: VectorStoreCredential;
+  inboundAuth?: VectorStoreInboundAuth;
+  status: VectorStoreStatus;
+  turbopufferUrl?: string;
+}
+
+export interface VectorStoreList {
+  [key: string]: unknown;
+  vectorstores: VectorStore[];
+}
+
+export interface WarehouseSecretRef {
+  [key: string]: unknown;
+  name: string;
+}
+
+export interface WarehousePool {
+  [key: string]: unknown;
+  size: number;
+  timeout: string;
+}
+
+export interface SnowflakeWarehouse {
+  [key: string]: unknown;
+  account: string;
+  user: string;
+  role?: string;
+  warehouse: string;
+  keyPairSecretRef: WarehouseSecretRef;
+  pool?: WarehousePool;
+}
+
+export interface RestWarehouse {
+  [key: string]: unknown;
+  baseUrl: string;
+  auth?: RestWarehouseAuth;
+  rateLimit?: RestWarehouseRateLimit;
+  verify: RestWarehouseVerify;
+}
+
+export interface RestWarehouseAuth {
+  [key: string]: unknown;
+  "in": "query" | "header";
+  name: string;
+  secretRef: WarehouseSecretRef;
+}
+
+export interface RestWarehouseRateLimit {
+  [key: string]: unknown;
+  requestsPerSecond: number;
+}
+
+export interface RestWarehouseVerify {
+  [key: string]: unknown;
+  path: string;
+  query?: Record<string, string>;
+}
+
+export type WarehousePhase = "Pending" | "Verified" | "Failed";
+
+export interface WarehouseConsumers {
+  [key: string]: unknown;
+  pipelines: number;
+  apiKeys: number;
+}
+
+export interface WarehouseStatus {
+  [key: string]: unknown;
+  phase?: WarehousePhase;
+  verifiedAt?: string;
+  failureReason?: string;
+  consumers: WarehouseConsumers;
+  observedGeneration?: number;
+  conditions: KubernetesCondition[];
+}
+
+export interface Warehouse {
+  [key: string]: unknown;
+  name: string;
+  "namespace": string;
+  kind: string;
+  snowflake?: SnowflakeWarehouse;
+  rest?: RestWarehouse;
+  verifyInterval: string;
+  status: WarehouseStatus;
+}
+
+export interface WarehouseList {
+  [key: string]: unknown;
+  warehouses: Warehouse[];
+}
+
+export interface ApiKeyEntitlement {
+  [key: string]: unknown;
+  scopes?: ("read" | "write" | "admin")[];
+  namespaces?: string[];
+  claims?: string[];
+}
+
+export type ApiKeyEntitlements = Record<string, ApiKeyEntitlement>;
+
+export type ApiKeyPhase = "Pending" | "Active" | "Revoked" | "Expired";
+
+export interface ApiKey {
+  [key: string]: unknown;
+  keyId: string;
+  name: string;
+  owner?: string;
+  description?: string;
+  entitlements: ApiKeyEntitlements;
+  expiresAfter?: string;
+  phase: ApiKeyPhase;
+  createdAt: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  lastSeenAt?: string;
+  lookupHash?: string;
+  secretRef?: Record<string, unknown>;
+}
+
+export interface ApiKeyList {
+  [key: string]: unknown;
+  keys: ApiKey[];
+}
+
+export interface MintKeyRequest {
+  [key: string]: unknown;
+  name: string;
+  owner?: string;
+  description?: string;
+  entitlements?: ApiKeyEntitlements;
+  expiresAfter?: string;
+}
+
+export interface MintKeyResponse {
+  [key: string]: unknown;
+  keyId: string;
+  name: string;
+  owner?: string;
+  description?: string;
+  entitlements: ApiKeyEntitlements;
+  expiresAfter?: string;
+  phase: ApiKeyPhase;
+  createdAt: string;
+  expiresAt?: string;
+  token: string;
+}
+
+export interface AuthenticateKeyRequest {
+  [key: string]: unknown;
+  token: string;
+}
+
+export interface AuthenticateKeyResponse {
+  [key: string]: unknown;
+  keyId: string;
+  name: string;
+  owner?: string;
+  entitlements: ApiKeyEntitlements;
+  expiresAt?: string;
 }

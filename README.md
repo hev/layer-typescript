@@ -1,7 +1,7 @@
 # hevlayer TypeScript Client
 
 > **Generated mirror — do not send PRs here.**
-> This repository is published automatically from the private `hev/layer`
+> This repository is published automatically from the private `hev/layer-pro`
 > monorepo, derived from the gateway's OpenAPI spec. Edits to client code here
 > are overwritten on the next release. File bugs and requests as
 > [issues](https://github.com/hev/layer-typescript/issues); fixes land upstream and
@@ -21,7 +21,6 @@ import { Hevlayer } from "hevlayer";
 const client = new Hevlayer({
   baseUrl: process.env.LAYER_GATEWAY_URL,
   apiKey: process.env.LAYER_GATEWAY_API_KEY,
-  turbopufferApiKey: process.env.TURBOPUFFER_API_KEY,
 });
 
 const response = await client.queryNamespace(
@@ -38,27 +37,21 @@ console.log(response.perf.latencyMs, response.perf.cacheStatus);
 console.log(response.data.rows);
 ```
 
-## Direct Turbopuffer Fallback
-
-When configured with `turbopufferApiKey` or `TURBOPUFFER_API_KEY`,
-`Hevlayer` falls through to Turbopuffer direct if the gateway is unreachable
-for simple vector queries and raw Turbopuffer-compatible methods such as
-`writeNamespace`, `queryTurbopufferNamespace`, and
-`listTurbopufferNamespaces`. Layer-only methods such as fetch, warm jobs,
-pipelines, UDFs, and `nearest_to_id` queries still fail fast because they
-depend on gateway state. Disable this with `fallbackToTurbopuffer: false`.
-
 ## Generated Operations
 
+- `authenticateKey`
+- `batchQueryNamespace`
 - `branchNamespace`
 - `claimDocuments`
 - `claimUdfItems`
 - `completeUdfItems`
 - `copyNamespace`
+- `createCheckpoint`
 - `createPipeline`
 - `createScan`
 - `createSnapshot`
 - `createUdf`
+- `deleteKey`
 - `deleteNamespace`
 - `deletePipeline`
 - `deleteScan`
@@ -69,7 +62,15 @@ depend on gateway state. Disable this with `fallbackToTurbopuffer: false`.
 - `failUdfItems`
 - `fetchDocument`
 - `fetchDocuments`
+- `getBlob`
+- `getCheckpoint`
+- `getCostRateCard`
+- `getCostSnapshot`
+- `getCostTimeseries`
+- `getKey`
+- `getLicense`
 - `getMetricCatalogEntry`
+- `getNamespaceCapabilities`
 - `getNamespaceMetadata`
 - `getNamespaceSnapshot`
 - `getPipelineDocumentChunks`
@@ -77,15 +78,23 @@ depend on gateway state. Disable this with `fallbackToTurbopuffer: false`.
 - `getScan`
 - `getScanResults`
 - `getSnapshotJob`
+- `getSnapshotPolicy`
 - `getTurbopufferNamespaceSchema`
 - `getTurbopufferV1NamespaceMetadata`
 - `getUdf`
 - `getUdfStatus`
+- `getVectorstore`
+- `getVectorStoreCapabilities`
+- `getWarehouse`
 - `getWarmJob`
 - `heartbeatDocuments`
 - `heartbeatUdfItems`
 - `hintCacheWarm`
+- `importNamespace`
+- `initNamespace`
+- `listCheckpoints`
 - `listClickstream`
+- `listKeys`
 - `listMetricsCatalog`
 - `listNamespaceHistory`
 - `listNamespaces`
@@ -96,11 +105,17 @@ depend on gateway state. Disable this with `fallbackToTurbopuffer: false`.
 - `listSnapshotJobs`
 - `listTurbopufferNamespaces`
 - `listUdfs`
+- `listVectorstores`
+- `listWarehouses`
 - `listWarmJobs`
-- `multiQueryTurbopufferNamespace`
+- `mintKey`
 - `pauseUdf`
+- `putBlob`
 - `putPipelineDocumentChunks`
 - `putPipelineDocumentVectors`
+- `putSnapshotPolicy`
+- `query`
+- `queryAgent`
 - `queryMetrics`
 - `queryMetricsApiV1`
 - `queryMetricsRange`
@@ -109,8 +124,10 @@ depend on gateway state. Disable this with `fallbackToTurbopuffer: false`.
 - `queryTurbopufferNamespace`
 - `resetFailedUdf`
 - `resumeUdf`
+- `revokeKey`
 - `setDocumentsStage`
 - `updateTurbopufferNamespaceMetadata`
 - `updateTurbopufferNamespaceSchema`
+- `upsertUdf`
 - `warmCache`
 - `writeNamespace`
